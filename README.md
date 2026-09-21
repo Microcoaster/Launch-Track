@@ -46,8 +46,6 @@ Une rampe trop courte fait patiner le taquet ou force sur l'accroche. C'est le p
 
 Nécessite [PlatformIO](https://platformio.org/) dans Visual Studio Code.
 
-<img src="docs/blocs/01.png" alt="Terminal bash : compiler et téléverser" width="100%">
-
 ```bash
 pio run                  # compilation
 pio run -t upload        # téléversement du firmware
