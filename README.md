@@ -18,15 +18,7 @@ Tout tourne autour d'une question : le taquet est-il là où on croit, et entra�
 
 Un codeur sur l'arbre de la poulie répond aux deux. Il donne la vitesse de la courroie, ce qui permet de suivre la rampe d'accélération. Et il donne la position du taquet sur son parcours, ce qui permet de le ramener au repos après chaque lancement.
 
-```
-HOMING       recherche de la position de repos du taquet
-IDLE         taquet au repos, zone libre
-LOADED       train présent et accroché, en attente d'autorisation
-LAUNCHING    rampe d'accélération de RAMP_UP_MS
-RELEASED     train parti, décélération de la courroie
-RETURNING    retour du taquet au repos
-FAULT        patinage, taquet perdu, ou délai dépassé
-```
+<img src="docs/schemas/etats.png" alt="HOMING : le taquet cherche sa position de repos au démarrage. IDLE : taquet au repos, zone libre. LOADED : train accroché, en attente d'autorisation. LAUNCHING : rampe d'accélération. RELEASED : train parti, la courroie décélère. RETURNING : retour du taquet au repos, puis cycle complet vers IDLE. FAULT : patinage, taquet introuvable ou délai dépassé, accessible depuis n'importe quel état." width="100%">
 
 Le taquet ne revient pas en marche arrière brutale : la courroie décélère sur `RAMP_DOWN_MS`, puis repart lentement à `RETURN_SPEED_PERCENT` jusqu'au capteur de repos.
 
@@ -42,28 +34,11 @@ Le taquet ne revient pas en marche arrière brutale : la courroie décélère su
 
 <img src="docs/sections/s03.png" alt="03 Matériel" width="100%">
 
-| Élément | Broche | Rôle |
-|:--|:--|:--|
-| Moteur, rapport cyclique | 25 | Vitesse de la courroie |
-| Moteur, sens | 26 | Lancement ou retour du taquet |
-| Moteur, activation | 27 | Coupure de puissance |
-| Codeur, voie A | 34 | Vitesse et position |
-| Codeur, voie B | 35 | Sens de rotation |
-| Capteur de repos | 32 | Position de repos du taquet |
-| Capteur de présence | 33 | Train en zone |
-| Capteur de sortie | 36 | Sortie effective |
-| LED prêt | 2 | État `LOADED` |
-| LED défaut | 4 | État `FAULT` |
+<img src="docs/schemas/brochage.png" alt="Sorties : GPIO 25 moteur PWM pour la vitesse de la courroie, GPIO 26 sens du moteur, GPIO 27 activation du moteur, GPIO 2 LED prêt pour l'état LOADED, GPIO 4 LED défaut pour l'état FAULT. Entrées : GPIO 34 codeur voie A pour la vitesse et la position, GPIO 35 codeur voie B pour le sens de rotation, GPIO 32 capteur de repos du taquet, GPIO 33 capteur de présence du train, GPIO 36 capteur de sortie." width="100%">
 
 <img src="docs/sections/s04.png" alt="04 Réglages" width="100%">
 
-| Paramètre | Effet |
-|:--|:--|
-| `LAUNCH_SPEED_PERCENT` | Vitesse visée en fin d'accélération |
-| `RAMP_UP_MS` | Caractère du lancement : court et brutal, ou long et progressif |
-| `RAMP_DOWN_MS` | Décélération après relâche, évite la butée du taquet |
-| `RETURN_SPEED_PERCENT` | Vitesse de retour au repos |
-| `SLIP_TOLERANCE_PERCENT` | Seuil de détection du patinage |
+<img src="docs/schemas/reglages.png" alt="LAUNCH_SPEED_PERCENT : vitesse visée en fin d'accélération. RAMP_UP_MS : caractère du lancement, court et brutal ou long et progressif. RAMP_DOWN_MS : décélération après la relâche. RETURN_SPEED_PERCENT : vitesse de retour au repos. SLIP_TOLERANCE_PERCENT : écart toléré avant de déclarer le patinage. LAUNCH_TIMEOUT_MS : délai au-delà duquel une sortie jamais constatée devient un défaut." width="100%">
 
 Une rampe trop courte fait patiner le taquet ou force sur l'accroche. C'est le premier réglage à revoir si le lancement manque de tenue.
 
