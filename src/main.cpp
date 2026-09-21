@@ -1,8 +1,9 @@
 /*
  * MicroCoaster - Module Launch Track ESP32
  *
- * Zone de lancement : pilotage des bobines de propulsion, rampe de puissance
- * et verrouillage du train tant que la séquence n'est pas autorisée.
+ * Zone de lancement par entraînement mécanique : un moteur fait tourner une
+ * poulie, la poulie entraîne une courroie dentée, et un taquet solidaire de la
+ * courroie accroche le train pour l'accélérer avant de le relâcher.
  *
  * Auteurs: CyberSpaceRS, Yamakajump
  * Version: 0.1.0
@@ -17,20 +18,23 @@
 // CONFIGURATION MATERIELLE
 // ========================================
 
-// Sorties de puissance. Chaque bobine est commandée par son propre MOSFET :
-// la rampe s'obtient en les enclenchant l'une après l'autre, pas en modulant.
-#define COIL_1_PIN 25
-#define COIL_2_PIN 26
-#define COIL_3_PIN 27
-#define COIL_4_PIN 14
+// Moteur d'entraînement de la poulie, via pont en H.
+#define MOTOR_PWM_PIN 25
+#define MOTOR_DIR_PIN 26
+#define MOTOR_ENABLE_PIN 27
 
-// Frein de maintien. Actif tant que le lancement n'est pas autorisé : c'est lui
-// qui garantit qu'un train ne part pas sur un ordre perdu ou une coupure réseau.
-#define HOLD_BRAKE_PIN 12
+// Codeur sur l'arbre de la poulie. Donne la vitesse réelle de la courroie et
+// permet de savoir où se trouve le taquet sur son parcours.
+#define ENCODER_A_PIN 34
+#define ENCODER_B_PIN 35
 
-// Détection de présence en entrée de zone et de sortie effective du train.
-#define SENSOR_ENTRY_PIN 34
-#define SENSOR_EXIT_PIN 35
+// Capteur de position de repos du taquet. Entre deux lancements, le taquet doit
+// revenir exactement là, sinon il n'accrochera pas le train suivant.
+#define CATCH_HOME_PIN 32
+
+// Présence du train en zone, et sortie effective après lancement.
+#define SENSOR_TRAIN_PIN 33
+#define SENSOR_EXIT_PIN 36
 
 // Signalisation d'état.
 #define LED_READY_PIN 2
@@ -40,44 +44,68 @@
 // PARAMETRES DE LANCEMENT
 // ========================================
 
-// Délai entre l'enclenchement de deux bobines consécutives, en millisecondes.
-// Plus il est court, plus l'accélération est forte.
-static const uint16_t COIL_STEP_MS = 60;
+// Vitesse de courroie visée en fin d'accélération, en pourcentage du rapport
+// cyclique moteur.
+static const uint8_t LAUNCH_SPEED_PERCENT = 85;
 
-// Durée maximale d'alimentation d'une bobine. Au-delà, on coupe : une bobine
-// laissée sous tension chauffe et rien ne justifie de la maintenir si le train
-// n'est pas sorti de la zone.
-static const uint16_t COIL_MAX_ON_MS = 400;
+// Durée de la rampe d'accélération, en millisecondes. C'est elle qui donne son
+// caractère au lancement : courte, la poussée est brutale ; longue, elle est
+// progressive. Trop courte, le taquet patine ou arrache.
+static const uint16_t RAMP_UP_MS = 700;
 
-// Temps au-delà duquel on considère que le train n'est jamais sorti.
-static const uint16_t LAUNCH_TIMEOUT_MS = 3000;
+// Décélération de la courroie une fois le train relâché. La courroie ne doit
+// pas s'arrêter net : le taquet reviendrait en butée.
+static const uint16_t RAMP_DOWN_MS = 900;
+
+// Vitesse de retour du taquet à sa position de repos.
+static const uint8_t RETURN_SPEED_PERCENT = 30;
+
+// Écart toléré entre la vitesse demandée et la vitesse mesurée au codeur.
+// Au-delà, c'est que le taquet patine sur le train.
+static const uint8_t SLIP_TOLERANCE_PERCENT = 15;
+
+// Délais de garde.
+static const uint16_t LAUNCH_TIMEOUT_MS = 4000;
+static const uint16_t RETURN_TIMEOUT_MS = 6000;
 
 // ========================================
 // ETATS
 // ========================================
 
 enum LaunchState {
-  STATE_IDLE,      // Aucun train en zone
-  STATE_LOADED,    // Train présent, frein serré, en attente d'autorisation
-  STATE_LAUNCHING, // Séquence de bobines en cours
-  STATE_FAULT      // Anomalie : sortie non constatée, capteur incohérent
+  STATE_HOMING,    // Recherche de la position de repos du taquet
+  STATE_IDLE,      // Taquet au repos, aucun train en zone
+  STATE_LOADED,    // Train présent et accroché, en attente d'autorisation
+  STATE_LAUNCHING, // Accélération de la courroie en cours
+  STATE_RELEASED,  // Train relâché, décélération de la courroie
+  STATE_RETURNING, // Retour du taquet vers sa position de repos
+  STATE_FAULT      // Patinage, taquet perdu, ou délai dépassé
 };
 
-static LaunchState state = STATE_IDLE;
+static LaunchState state = STATE_HOMING;
 
 // ========================================
 // A IMPLEMENTER
 // ========================================
 //
-// setup()  : initialisation des sorties en état sûr (frein serré, bobines
-//            coupées), portail WiFi, puis connexion WebSocket au serveur.
+// setup()  : moteur en état sûr, interruptions sur les deux voies du codeur,
+//            recherche de la position de repos du taquet, portail WiFi, puis
+//            connexion WebSocket au serveur.
 //
-// loop()   : lecture des capteurs, machine à états ci-dessus, et remontée de
-//            télémétrie périodique.
+// loop()   : machine à états ci-dessus, asservissement de vitesse sur le
+//            codeur, détection de patinage, et télémétrie périodique.
 //
-// Règle qui ne se discute pas : toute perte de liaison WebSocket ramène le
-// module en STATE_LOADED avec le frein serré. Le lancement n'est jamais
-// déclenché localement, il est toujours autorisé par le contrôleur.
+// Trois règles qui ne se discutent pas.
+//
+// Le lancement n'est jamais décidé localement. Le module exécute un ordre du
+// contrôleur, qui seul sait si la voie en aval est libre.
+//
+// Un écart durable entre vitesse demandée et vitesse mesurée signifie que le
+// taquet patine sur le train. On coupe : insister use la courroie et peut
+// endommager l'accroche.
+//
+// Le taquet doit être à sa position de repos avant d'accepter un nouveau
+// train. Sans cela, il accroche au mauvais endroit, ou pas du tout.
 
 void setup() {
   Serial.begin(115200);

@@ -4,43 +4,70 @@
 
 </div>
 
-La zone de lancement accélère le train sur quelques dizaines de centimètres, au lieu de le hisser en haut d'une montée. Le module pilote une série de bobines de propulsion, les enclenche dans l'ordre pour construire une rampe de puissance, et ne relâche le frein de maintien qu'une fois la séquence autorisée par le contrôleur.
+La zone de lancement accélère le train sur quelques dizaines de centimètres, au lieu de le hisser en haut d'une montée. Un moteur entraîne une poulie, la poulie fait tourner une courroie dentée, et un taquet solidaire de cette courroie vient accrocher le train, l'emmène en accélérant, puis le relâche.
+
+Le module pilote ce moteur, mesure la vitesse réelle de la courroie au codeur, et ramène le taquet à sa position de repos entre deux lancements.
 
 Comme les autres modules, il se configure au premier démarrage par portail captif, puis rejoint le serveur en WebSocket.
 
 ## Principe
 
-Chaque bobine a son propre MOSFET. L'accélération ne vient pas d'une modulation de puissance mais du **décalage entre les enclenchements** : plus l'intervalle est court, plus la poussée est forte. Le réglage se fait dans `COIL_STEP_MS`.
+Tout tourne autour d'une question : le taquet est-il là où on croit, et entraîne-t-il vraiment le train ?
+
+Un codeur sur l'arbre de la poulie répond aux deux. Il donne la vitesse de la courroie, ce qui permet de suivre la rampe d'accélération. Et il donne la position du taquet sur son parcours, ce qui permet de le ramener au repos après chaque lancement.
 
 ```
-Train détecté      frein serré, état LOADED
-Ordre reçu         frein relâché, bobine 1, 2, 3, 4 en cascade
-Sortie constatée   bobines coupées, retour en IDLE
-Pas de sortie      bobines coupées, état FAULT
+HOMING       recherche de la position de repos du taquet
+IDLE         taquet au repos, zone libre
+LOADED       train présent et accroché, en attente d'autorisation
+LAUNCHING    rampe d'accélération de RAMP_UP_MS
+RELEASED     train parti, décélération de la courroie
+RETURNING    retour du taquet au repos
+FAULT        patinage, taquet perdu, ou délai dépassé
 ```
+
+Le taquet ne revient pas en marche arrière brutale : la courroie décélère sur `RAMP_DOWN_MS`, puis repart lentement à `RETURN_SPEED_PERCENT` jusqu'au capteur de repos.
+
+## Détection de patinage
+
+C'est la protection la plus utile du module. Si la vitesse mesurée au codeur s'écarte durablement de la consigne au-delà de `SLIP_TOLERANCE_PERCENT`, c'est que le taquet glisse sur le train au lieu de l'entraîner.
+
+On coupe immédiatement. Insister use la courroie, arrondit les dents, et finit par abîmer la pièce d'accroche du train.
 
 ## Sécurité
 
-Trois garde-fous, dans cet ordre d'importance.
+**Aucun lancement n'est décidé localement.** Le module exécute un ordre du contrôleur, qui seul sait si la voie en aval est dégagée.
 
-**Le frein de maintien est le défaut.** Au repos, à la mise sous tension et à toute anomalie, il est serré. Le train ne part que sur une action explicite.
+**Le taquet doit être au repos avant d'accepter un train.** S'il ne l'est pas, il accrochera au mauvais endroit, ou pas du tout. C'est la raison d'être de l'état `HOMING` au démarrage.
 
-**Aucun lancement n'est décidé localement.** Le module exécute, il ne juge pas. C'est le contrôleur qui autorise, après avoir vérifié que la voie en aval est libre.
-
-**Une perte de liaison ramène en état sûr.** Si le WebSocket tombe, le module repasse en `LOADED`, frein serré, et attend le retour du serveur.
-
-À cela s'ajoutent deux limites matérielles : `COIL_MAX_ON_MS` coupe toute bobine restée alimentée trop longtemps, et `LAUNCH_TIMEOUT_MS` déclare le défaut si la sortie n'est jamais constatée.
+**Deux délais bornent l'opération.** `LAUNCH_TIMEOUT_MS` déclare le défaut si la sortie n'est jamais constatée, `RETURN_TIMEOUT_MS` si le taquet ne retrouve pas sa position de repos.
 
 ## Matériel
 
 | Élément | Broche | Rôle |
 |:--|:--|:--|
-| Bobines 1 à 4 | 25, 26, 27, 14 | Propulsion, un MOSFET par bobine |
-| Frein de maintien | 12 | Actif au repos |
-| Capteur d'entrée | 34 | Présence du train en zone |
-| Capteur de sortie | 35 | Sortie effective |
+| Moteur, rapport cyclique | 25 | Vitesse de la courroie |
+| Moteur, sens | 26 | Lancement ou retour du taquet |
+| Moteur, activation | 27 | Coupure de puissance |
+| Codeur, voie A | 34 | Vitesse et position |
+| Codeur, voie B | 35 | Sens de rotation |
+| Capteur de repos | 32 | Position de repos du taquet |
+| Capteur de présence | 33 | Train en zone |
+| Capteur de sortie | 36 | Sortie effective |
 | LED prêt | 2 | État `LOADED` |
 | LED défaut | 4 | État `FAULT` |
+
+## Réglages
+
+| Paramètre | Effet |
+|:--|:--|
+| `LAUNCH_SPEED_PERCENT` | Vitesse visée en fin d'accélération |
+| `RAMP_UP_MS` | Caractère du lancement : court et brutal, ou long et progressif |
+| `RAMP_DOWN_MS` | Décélération après relâche, évite la butée du taquet |
+| `RETURN_SPEED_PERCENT` | Vitesse de retour au repos |
+| `SLIP_TOLERANCE_PERCENT` | Seuil de détection du patinage |
+
+Une rampe trop courte fait patiner le taquet ou force sur l'accroche. C'est le premier réglage à revoir si le lancement manque de tenue.
 
 ## Compiler et téléverser
 
@@ -64,7 +91,7 @@ Les identifiants restent en mémoire du module, jamais dans le dépôt.
 
 ## État
 
-Version `0.1.0`. Le squelette, le brochage et la machine à états sont posés dans `src/main.cpp`. Restent à écrire la séquence de bobines, l'asservissement du frein et la remontée de télémétrie.
+Version `0.1.0`. Le brochage, les paramètres et la machine à états sont posés dans `src/main.cpp`. Restent à écrire la lecture du codeur sur interruption, l'asservissement de vitesse, la détection de patinage et la télémétrie.
 
 ---
 
