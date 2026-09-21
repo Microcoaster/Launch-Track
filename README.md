@@ -10,7 +10,9 @@ Le module pilote ce moteur, mesure la vitesse réelle de la courroie au codeur, 
 
 Comme les autres modules, il se configure au premier démarrage par portail captif, puis rejoint le serveur en WebSocket.
 
-## Principe
+**Version 0.1.0**
+
+<img src="docs/sections/s01.png" alt="01 Principe" width="100%">
 
 Tout tourne autour d'une question : le taquet est-il là où on croit, et entraîne-t-il vraiment le train ?
 
@@ -28,13 +30,7 @@ FAULT        patinage, taquet perdu, ou délai dépassé
 
 Le taquet ne revient pas en marche arrière brutale : la courroie décélère sur `RAMP_DOWN_MS`, puis repart lentement à `RETURN_SPEED_PERCENT` jusqu'au capteur de repos.
 
-## Détection de patinage
-
-C'est la protection la plus utile du module. Si la vitesse mesurée au codeur s'écarte durablement de la consigne au-delà de `SLIP_TOLERANCE_PERCENT`, c'est que le taquet glisse sur le train au lieu de l'entraîner.
-
-On coupe immédiatement. Insister use la courroie, arrondit les dents, et finit par abîmer la pièce d'accroche du train.
-
-## Sécurité
+<img src="docs/sections/s02.png" alt="02 Sécurité" width="100%">
 
 **Aucun lancement n'est décidé localement.** Le module exécute un ordre du contrôleur, qui seul sait si la voie en aval est dégagée.
 
@@ -42,7 +38,9 @@ On coupe immédiatement. Insister use la courroie, arrondit les dents, et finit 
 
 **Deux délais bornent l'opération.** `LAUNCH_TIMEOUT_MS` déclare le défaut si la sortie n'est jamais constatée, `RETURN_TIMEOUT_MS` si le taquet ne retrouve pas sa position de repos.
 
-## Matériel
+**Le patinage coupe tout.** Si la vitesse mesurée au codeur s'écarte durablement de la consigne au-delà de `SLIP_TOLERANCE_PERCENT`, c'est que le taquet glisse sur le train au lieu de l'entraîner. Insister use la courroie, arrondit les dents, et finit par abîmer la pièce d'accroche du train.
+
+<img src="docs/sections/s03.png" alt="03 Matériel" width="100%">
 
 | Élément | Broche | Rôle |
 |:--|:--|:--|
@@ -57,7 +55,7 @@ On coupe immédiatement. Insister use la courroie, arrondit les dents, et finit 
 | LED prêt | 2 | État `LOADED` |
 | LED défaut | 4 | État `FAULT` |
 
-## Réglages
+<img src="docs/sections/s04.png" alt="04 Réglages" width="100%">
 
 | Paramètre | Effet |
 |:--|:--|
@@ -69,7 +67,7 @@ On coupe immédiatement. Insister use la courroie, arrondit les dents, et finit 
 
 Une rampe trop courte fait patiner le taquet ou force sur l'accroche. C'est le premier réglage à revoir si le lancement manque de tenue.
 
-## Compiler et téléverser
+<img src="docs/sections/s05.png" alt="05 Mise en service" width="100%">
 
 Nécessite [PlatformIO](https://platformio.org/) dans Visual Studio Code.
 
@@ -80,8 +78,6 @@ pio run -t uploadfs      # téléversement du portail vers LittleFS
 pio device monitor       # console série, 115200 bauds
 ```
 
-## Première mise en service
-
 1. Alimenter le module. Il crée un point d'accès WiFi.
 2. S'y connecter et ouvrir `http://192.168.4.1`.
 3. Renseigner le réseau de destination.
@@ -89,10 +85,12 @@ pio device monitor       # console série, 115200 bauds
 
 Les identifiants restent en mémoire du module, jamais dans le dépôt.
 
-## État
+<img src="docs/sections/s06.png" alt="06 Écosystème" width="100%">
 
-Version `0.1.0`. Le brochage, les paramètres et la machine à états sont posés dans `src/main.cpp`. Restent à écrire la lecture du codeur sur interruption, l'asservissement de vitesse, la détection de patinage et la télémétrie.
+Le brochage, les paramètres et la machine à états sont posés dans `src/main.cpp`. Restent à écrire la lecture du codeur sur interruption, l'asservissement de vitesse, la détection de patinage et la télémétrie.
+
+Le socle commun à tous les modules est le [WiFi Manager](https://github.com/Microcoaster/MicroCoaster_WifiManager). L'autre manière de donner son énergie au train est le [Lift Hill](https://github.com/Microcoaster/Lift-Hill). Le pilotage se fait depuis la [WebApp](https://github.com/Microcoaster/MicroCoasterWebApp).
 
 ---
 
-<sub>MicroCoaster · Auteurs : CyberSpaceRS, Yamakajump</sub>
+<sub>MicroCoaster · Auteur : Cybertrist</sub>
