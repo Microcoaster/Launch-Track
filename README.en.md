@@ -71,7 +71,7 @@ The credentials stay in the module's memory, never in the repository.
 
 The pinout, the parameters and the state machine are laid down in `src/main.cpp`. What remains to be written is reading the encoder on interrupt, the speed loop, slip detection and telemetry.
 
-The common base for every module is the [WiFi Manager](https://github.com/Microcoaster/MicroCoaster_WifiManager). The other way of giving the train its energy is the [Lift Hill](https://github.com/Microcoaster/Lift-Hill). The driving is done from the [WebApp](https://github.com/Microcoaster/MicroCoasterWebApp).
+The common base for every module is the [WiFi Manager](https://github.com/Microcoaster/MicroCoaster_WifiManager/blob/main/README.en.md). The other way of giving the train its energy is the [Lift Hill](https://github.com/Microcoaster/Lift-Hill/blob/main/README.en.md). The driving is done from the [WebApp](https://github.com/Microcoaster/MicroCoasterWebApp/blob/main/README.en.md).
 
 ---
 
