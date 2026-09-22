@@ -5,7 +5,7 @@
  * poulie, la poulie entraîne une courroie dentée, et un taquet solidaire de la
  * courroie accroche le train pour l'accélérer avant de le relâcher.
  *
- * Auteurs: CyberSpaceRS, Yamakajump
+ * Auteurs: Cybertrist, Yamakajump
  * Version: 0.1.0
  */
 
